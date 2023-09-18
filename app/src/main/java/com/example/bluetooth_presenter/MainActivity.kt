@@ -17,12 +17,10 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
-import androidx.core.app.ActivityCompat.shouldShowRequestPermissionRationale
 import androidx.core.content.ContextCompat
-import androidx.core.content.ContextCompat.registerReceiver
-import androidx.core.content.ContextCompat.startActivity
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.example.bluetooth_presenter.databinding.ActivityMainBinding
+
 import java.io.IOException
 import java.io.InputStream
 import java.io.OutputStream
@@ -37,6 +35,9 @@ class MainActivity : AppCompatActivity() {
     private val bluetoothManager: BluetoothManager by lazy {
         getSystemService(BluetoothManager::class.java)
     }
+    private lateinit var connectThread: ConnectThread
+    private lateinit var connectedThread: ConnectThread.ConnectedThread
+
     private val bluetoothAdapter: BluetoothAdapter? by lazy {
         bluetoothManager.adapter
     }
@@ -46,7 +47,7 @@ class MainActivity : AppCompatActivity() {
 
     private var inputStream: InputStream? = null //블루투스에 데이터 입력하기 위한 입력스트림
 
-    private lateinit var bAdapter : com.example.bluetooth_presenter.BluetoothAdapter
+    private lateinit var bAdapter: BtnAdapter
 
     private var workerThread: Thread? = null //문자열 수신에 사용되는 쓰레드
 
@@ -65,16 +66,31 @@ class MainActivity : AppCompatActivity() {
 
     @SuppressLint("MissingPermission")
     override fun onCreate(savedInstanceState: Bundle?) {
+        val uuid = UUID.fromString("00001101-0000-1000-8000-00805f9b34fb")
         super.onCreate(savedInstanceState)
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
         requestPermission()
         //블루투스 연동 하기
 
-        bAdapter = BluetoothAdapter { device ->
-            Log.e("bluetooth",device.name + device.address)
+        bAdapter = BtnAdapter { device ->
+            Log.e("bluetooth", device.name + device.address)
             Toast.makeText(this, device.name, Toast.LENGTH_SHORT).show()
-            MakeSocket(device)
+            if (bluetoothAdapter?.isDiscovering == true) {
+                bluetoothAdapter?.cancelDiscovery()
+            }
+            try {
+                connectThread = ConnectThread(uuid, device)
+                connectThread.run()
+                connectedThread = connectThread.getConnectedThread2()!!
+                Toast.makeText(this, "${device.name}과 연결되었습니다.", Toast.LENGTH_SHORT).show()
+                connectedThread = connectThread.getConnectedThread2()!!
+                connectedThread.run()
+            } catch (e: Exception) { // 연결에 실패할 경우 호출됨
+                Toast.makeText(this, e.toString(), Toast.LENGTH_SHORT).show()
+                Log.e("test", e.toString())
+            }
+
         }
 
 
@@ -114,11 +130,16 @@ class MainActivity : AppCompatActivity() {
         }
         binding.btnSendData.setOnClickListener {
             sendData(binding.tvSendData.getText().toString())
-            Toast.makeText(this,"Data를 보냈습니다.",Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "Data를 보냈습니다.", Toast.LENGTH_SHORT).show()
         }
 
         binding.findlist.setOnClickListener {
             selectBluetoothDevice()
+        }
+
+        binding.btnConnect.setOnClickListener {
+            Toast.makeText(this, "서버 열기", Toast.LENGTH_SHORT).show()
+            AcceptThread(bluetoothAdapter!!)
         }
     }
 
@@ -134,7 +155,7 @@ class MainActivity : AppCompatActivity() {
                     val device: BluetoothDevice =
                         intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE)!!
                     val deviceName = device.name
-                    if(deviceName == null)return
+                    if (deviceName == null) return
                     val deviceHardwareAddress = device.address // MAC address
                     device?.let {
                         discoveredDevices.add(it)
@@ -151,6 +172,7 @@ class MainActivity : AppCompatActivity() {
                     //모든 디바이스의 이름을 리스트에 추가
                     //findbluetoothlist.add(deviceName)
                 }
+
                 BluetoothAdapter.ACTION_DISCOVERY_FINISHED -> {
                     // 블루투스 검색이 완료된 후, 모든 디바이스 정보를 UI에 표시
                     Toast.makeText(
@@ -248,9 +270,17 @@ class MainActivity : AppCompatActivity() {
             bluetoothDevice?.getName() + " 연결 완료!",
             Toast.LENGTH_SHORT
         ).show();
-        MakeSocket(bluetoothDevice!!)
-    }
+        val uuid = UUID.fromString("00001101-0000-1000-8000-00805f9b34fb")
+        try {
+            connectThread = ConnectThread(uuid, bluetoothDevice!!)
+            connectThread.run()
+            Toast.makeText(this, "${bluetoothDevice!!.name}과 연결되었습니다.", Toast.LENGTH_SHORT).show()
 
+        } catch (e: Exception) { // 연결에 실패할 경우 호출됨
+            Toast.makeText(this, e.toString(), Toast.LENGTH_SHORT).show()
+            Log.e("test", e.toString())
+        }
+    }
 
     private fun checkPermission() {
         when {
@@ -261,9 +291,11 @@ class MainActivity : AppCompatActivity() {
                 Toast.makeText(this, "동의 완료", Toast.LENGTH_SHORT).show()
                 startActivity(Intent(this, BluetoothAcitivity::class.java))
             }
+
             shouldShowRequestPermissionRationale(Manifest.permission.BLUETOOTH_CONNECT) -> {
                 showPermissionInfoDialog()
             }
+
             else -> {
                 requestPermission()
             }
@@ -295,7 +327,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     @SuppressLint("MissingPermission")
-    private fun MakeSocket(bluetooth : BluetoothDevice){
+    private fun MakeSocket(bluetooth: BluetoothDevice) {
         val uuid = UUID.fromString("00001101-0000-1000-8000-00805f9b34fb")
         //connect_status = true;
         //Rfcomm 채널을 통해 블루투스 디바이스와 통신하는 소켓 생성
@@ -387,20 +419,10 @@ class MainActivity : AppCompatActivity() {
         workerThread!!.start()
     }
 
+
     fun sendData(text: String) {
 
-        // 문자열에 개행문자("\n")를 추가해줍니다.
-        var text = text
-        text += "\n"
-        try {
-            if(outputStream==null)  Log.e("bluetoothcheck", "에러발생")
-            // 데이터 송신
-            outputStream!!.write(text.toByteArray())
-            Log.e("bluetoothcheck", text)
-
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
+        if(connectedThread==null)Toast.makeText(this, "에러가 발생했습니다.", Toast.LENGTH_SHORT).show()
+        else connectedThread.write(text.toByteArray())
     }
-
 }

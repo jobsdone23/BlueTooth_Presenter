@@ -14,7 +14,7 @@ import androidx.recyclerview.widget.RecyclerView
 import com.example.bluetooth_presenter.databinding.ItemBluetoothListBinding
 
 
-class BluetoothAdapter(private val onClick :(BluetoothDevice) ->Unit) : ListAdapter<BluetoothDevice, BluetoothAdapter.ViewHolder>(differ) {
+class BtnAdapter(private val onClick :(BluetoothDevice) ->Unit) : ListAdapter<BluetoothDevice, BtnAdapter.ViewHolder>(differ) {
 
     inner class ViewHolder(private val binding: ItemBluetoothListBinding) :
         RecyclerView.ViewHolder(binding.root) {
@@ -31,7 +31,7 @@ class BluetoothAdapter(private val onClick :(BluetoothDevice) ->Unit) : ListAdap
                 Handler(Looper.getMainLooper()).postDelayed({
                     // 클릭한 항목의 스타일을 원래대로 복원
                     binding.root.setBackgroundColor(Color.WHITE)
-                }, 500)
+                }, 100)
             }
         }
     }

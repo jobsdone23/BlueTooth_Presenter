@@ -76,7 +76,7 @@
         android:layout_width="wrap_content"
         android:layout_height="0dp"
         android:layout_marginTop="10dp"
-        android:text="연결하기"
+        android:text="서버 열기"
         app:layout_constraintStart_toStartOf="@+id/tvBluetoothStatus"
         app:layout_constraintTop_toBottomOf="@+id/tvBluetoothStatus" />
 
