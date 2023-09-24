@@ -31,7 +31,7 @@ class BtnAdapter(private val onClick :(BluetoothDevice) ->Unit) : ListAdapter<Bl
                 Handler(Looper.getMainLooper()).postDelayed({
                     // 클릭한 항목의 스타일을 원래대로 복원
                     binding.root.setBackgroundColor(Color.WHITE)
-                }, 100)
+                }, 50)
             }
         }
     }
